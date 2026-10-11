@@ -21,6 +21,17 @@ CHANNELS = {
 }
 SEASONS = ["Q1", "Q2", "Q3", "Q4"]
 
+DEFAULTS = {"ig": 2500, "tv": 12000, "em": 2000}
+for _key, _value in DEFAULTS.items():
+    st.session_state.setdefault(_key, _value)
+
+
+def apply_budget_to_dashboard(ig, tv, em, key, value):
+    st.session_state["ig"] = ig
+    st.session_state["tv"] = tv
+    st.session_state["em"] = em
+    st.session_state[key] = value
+
 
 @st.cache_resource
 def load_bundle():
@@ -54,9 +65,9 @@ st.caption(
 
 with st.sidebar:
     st.header("Marketing budget")
-    instagram = st.slider("Instagram ad spend ($)", 0, 10000, 2500, 100, key="ig")
-    tv = st.slider("TV ad spend ($)", 0, 50000, 12000, 500, key="tv")
-    email = st.slider("Email spend ($)", 0, 10000, 2000, 100, key="em")
+    instagram = st.slider("Instagram ad spend ($)", 0, 10000, value=None, step=100, key="ig")
+    tv = st.slider("TV ad spend ($)", 0, 50000, value=None, step=500, key="tv")
+    email = st.slider("Email spend ($)", 0, 10000, value=None, step=100, key="em")
     season = st.selectbox("Season", SEASONS)
 
 row = build_row(instagram, tv, email, season, features)
@@ -77,7 +88,7 @@ for s in SEASONS:
 base_season_pred = season_rows[0]["Predicted sales ($)"]
 season_effect = pd.DataFrame(season_rows)
 season_effect["Δ vs Q1 ($)"] = season_effect["Predicted sales ($)"] - base_season_pred
-st.dataframe(season_effect, use_container_width=True, hide_index=True)
+st.dataframe(season_effect, width='stretch', hide_index=True)
 st.caption("Same budget, only the season changes. Q1 is the reference (baseline).")
 
 tab_contrib, tab_whatif, tab_history, tab_planner = st.tabs(
@@ -142,19 +153,19 @@ with tab_whatif:
     col3.metric("Change in sales", f"${new_pred - current_pred:+,.0f}")
 
     key_map = {v: k for k, v in CHANNELS.items()}
-    if st.button(f"Apply this new budget to the whole dashboard", type="primary"):
-        st.session_state["ig"] = instagram
-        st.session_state["tv"] = tv
-        st.session_state["em"] = email
-        st.session_state[key_map[column]] = scale
-        st.rerun()
+    st.button(
+        "Apply this new budget to the whole dashboard",
+        type="primary",
+        on_click=apply_budget_to_dashboard,
+        args=(instagram, tv, email, key_map[column], scale),
+    )
 
     st.markdown("**Incremental sales at selected budgets:**")
     levels = np.linspace(0, scale, 6, dtype=int)
     whatif = pd.DataFrame({"Budget ($)": levels})
     whatif["Predicted sales ($)"] = [predict_with(v, channel) for v in levels]
     whatif["Δ vs current ($)"] = whatif["Predicted sales ($)"] - current_pred
-    st.dataframe(whatif, use_container_width=True, hide_index=True)
+    st.dataframe(whatif, width='stretch', hide_index=True)
 
 with tab_history:
     st.subheader("Historical monthly sales vs budget (last 24 months)")
@@ -172,7 +183,7 @@ with tab_history:
     ax.grid(alpha=0.3)
     st.pyplot(fig, clear_figure=True)
     st.caption("Recent rows used for training (96 months total):")
-    st.dataframe(history.tail(12), use_container_width=True, hide_index=True)
+    st.dataframe(history.tail(12), width='stretch', hide_index=True)
 
 with tab_planner:
     st.subheader("How much budget do I need to hit my target?")
@@ -228,7 +239,7 @@ with tab_planner:
             )
 
         planner = pd.DataFrame(rows)
-        st.dataframe(planner, use_container_width=True, hide_index=True)
+        st.dataframe(planner, width='stretch', hide_index=True)
 
         q1_cost = planner.loc[planner["Season"] == "Q1", "Total budget needed ($)"].iloc[0]
         q4_cost = planner.loc[planner["Season"] == "Q4", "Total budget needed ($)"].iloc[0]
