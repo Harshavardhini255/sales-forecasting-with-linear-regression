@@ -19,6 +19,7 @@ CHANNELS = {
     "TV ads": "tv_ad_spend",
     "Email spend": "email_spend",
 }
+SEASONS = ["Q1", "Q2", "Q3", "Q4"]
 
 
 @st.cache_resource
@@ -56,7 +57,7 @@ with st.sidebar:
     instagram = st.slider("Instagram ad spend ($)", 0, 10000, 2500, 100)
     tv = st.slider("TV ad spend ($)", 0, 50000, 12000, 500)
     email = st.slider("Email spend ($)", 0, 10000, 2000, 100)
-    season = st.selectbox("Season", ["Q1", "Q2", "Q3", "Q4"])
+    season = st.selectbox("Season", SEASONS)
 
 row = build_row(instagram, tv, email, season, features)
 prediction = float(model.predict(row)[0])
@@ -67,8 +68,8 @@ c1.metric("Predicted monthly sales", f"${prediction:,.0f}")
 c2.metric("Total budget", f"${total_budget:,.0f}")
 c3.metric("Return per $1 of budget", f"${prediction / total_budget:,.2f}" if total_budget > 0 else "—")
 
-tab_contrib, tab_whatif, tab_history = st.tabs(
-    ["🔍 Contribution", "🎯 What-if analysis", "📅 Historical view"]
+tab_contrib, tab_whatif, tab_history, tab_planner = st.tabs(
+    ["🔍 Contribution", "🎯 What-if analysis", "📅 Historical view", "🗓️ Budget planner"]
 )
 
 with tab_contrib:
@@ -152,6 +153,72 @@ with tab_history:
     st.pyplot(fig, clear_figure=True)
     st.caption("Recent rows used for training (96 months total):")
     st.dataframe(history.tail(12), use_container_width=True, hide_index=True)
+
+with tab_planner:
+    st.subheader("How much budget do I need to hit my target?")
+    st.caption(
+        "Your current budget mix (IG / TV / Email) is scaled up or down in the "
+        "same proportions to reach a target. Because seasons carry a free sales "
+        "lift, the needed budget differs by season."
+    )
+
+    target_mode = st.radio(
+        "Target sales",
+        ["Current predicted sales", "Custom value"],
+        horizontal=True,
+    )
+    if target_mode == "Custom value":
+        target = st.number_input("Target monthly sales ($)", min_value=0, value=int(prediction), step=25000)
+    else:
+        target = prediction
+
+    if total_budget <= 0:
+        st.warning("Set at least one channel budget above $0 to use the planner.")
+    else:
+        coef_row = pd.Series(model.coef_, index=features)
+        channel_contrib = (
+            coef_row["instagram_ad_spend"] * instagram
+            + coef_row["tv_ad_spend"] * tv
+            + coef_row["email_spend"] * email
+        )
+
+        rows = []
+        for s in SEASONS:
+            season_effect = coef_row[f"season_{s}"] if s != "Q1" else 0.0
+            needed_scale = (
+                (target - model.intercept_ - season_effect) / channel_contrib
+                if abs(channel_contrib) > 1e-9
+                else float("nan")
+            )
+            needed_scale = float(np.clip(needed_scale, 0, 5))
+            scaled_budget = int(round((instagram * needed_scale + tv * needed_scale + email * needed_scale) / 1000) * 1000)
+            check_budget = (instagram * needed_scale, tv * needed_scale, email * needed_scale)
+            achieved = float(
+                model.predict(
+                    build_row(check_budget[0], check_budget[1], check_budget[2], s, features)
+                )[0]
+            )
+            rows.append(
+                {
+                    "Season": s,
+                    "Budget scale": f"{needed_scale:.2f}x",
+                    "Total budget needed ($)": scaled_budget,
+                    "Predicted sales ($)": int(round(achieved)),
+                }
+            )
+
+        planner = pd.DataFrame(rows)
+        st.dataframe(planner, use_container_width=True, hide_index=True)
+
+        q1_cost = planner.loc[planner["Season"] == "Q1", "Total budget needed ($)"].iloc[0]
+        q4_cost = planner.loc[planner["Season"] == "Q4", "Total budget needed ($)"].iloc[0]
+        if q1_cost > 0:
+            delta = q4_cost - q1_cost
+            sign = "more" if delta > 0 else "less"
+            st.info(
+                f"Q4 needs **${abs(delta):,} {sign}** budget than Q1 for the same "
+                f"${target:,.0f} target — the holiday season does part of the work for you."
+            )
 
 st.divider()
 st.caption("Model: " + type(model).__name__ + " · Explorer: contributions from linear coefficients.")
