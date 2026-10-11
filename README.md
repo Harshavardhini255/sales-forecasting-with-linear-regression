@@ -42,24 +42,71 @@ The same story is shown step-by-step in [`sales_forecast.ipynb`](sales_forecast.
 
 ---
 
+## Stage 2: Multi-channel forecasting & model comparison
+
+Stage 1 used a single feature. Stage 2 adds **TV ads, email spend and seasonality**, compares four model families with **5-fold cross-validation**, exports the winner with `joblib`, and serves it from a **Streamlit app**.
+
+### Models compared (5-fold CV)
+
+| Model | CV R² | CV MAE ($) |
+|---|---|---|
+| **Multiple Linear Regression** | **0.947** | **19,311** |
+| Ridge Regression | 0.944 | 20,498 |
+| Polynomial Regression (deg 2) | 0.925 | 21,938 |
+| Random Forest | 0.919 | 24,599 |
+
+The simplest model wins, and because it is linear it stays **interpretable**:
+
+![Best-model coefficients](output/coeffs_plot.png)
+
+| Channel | Sales per $1 spent (~) |
+|---|---|
+| Instagram ads | **+$94** |
+| TV ads | +$3.13 |
+| Email spend | +$2.42 |
+| Seasonality (Q4 vs Q1) | +$38k/month |
+
+**Key insight:** marketing money is not equal across channels — Instagram
+dominates return per dollar. This is the kind of finding that drives real budget
+decisions.
+
+### Run Stage 2
+
+```bash
+python generate_multi_data.py      # build the multi-channel dataset
+python model_comparison.py         # compare models, export best to output/sales_model.joblib
+streamlit run app.py               # interactive prediction app
+```
+
+Full walkthrough: [`model_comparison.ipynb`](model_comparison.ipynb).
+
+---
+
 ## Project structure
 
 ```
 sales-regression/
 ├── data/
-│   └── sales_data.csv        # 96 months of simulated history
+│   ├── sales_data.csv            # single-feature dataset (Stage 1)
+│   └── sales_data_multi.csv      # multi-channel dataset (Stage 2)
 ├── output/
-│   └── regression_plot.png   # scatter plot + regression line (generated)
-├── sales_forecast.ipynb      # walkthrough notebook (recruiter-friendly)
-├── sales_forecast.py         # script version of the same pipeline
-├── generate_data.py          # recreates data/sales_data.csv
+│   ├── regression_plot.png       # Stage 1 regression line
+│   ├── coeffs_plot.png           # Stage 2 channel impact chart
+│   └── sales_model.joblib        # exported best model for app.py
+├── sales_forecast.ipynb          # Stage 1 walkthrough notebook
+├── model_comparison.ipynb        # Stage 2 comparison notebook
+├── sales_forecast.py             # Stage 1 script
+├── model_comparison.py           # Stage 2 comparison script
+├── generate_data.py              # Stage 1 data generator
+├── generate_multi_data.py        # Stage 2 data generator
+├── app.py                        # Streamlit app serving sales_model.joblib
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## Run it
+## Run it (Stage 1)
 
 ```bash
 pip install -r requirements.txt
@@ -85,6 +132,8 @@ If you spend $3,500/month on Instagram ads, predicted sales: $295,030.24/month
 
 ## Interview talking points
 
+Stage 1 (single feature):
+
 - Why train/test split? It measures performance on data the model has never seen,
   not memorized data.
 - Why R²? It says *how much of sales variation the ad spend alone explains* (98.8% here).
@@ -93,9 +142,11 @@ If you spend $3,500/month on Instagram ads, predicted sales: $295,030.24/month
 - Practical judgment: simulation is noise-free enough to give near-perfect fit;
   with real data, an R² of 0.5–0.7 would already be a useful marketing signal.
 
-## Ideas to extend
+Stage 2 (model comparison):
 
-- Multiple linear regression (add TV ads, email spend, seasonality).
-- Compare against Ridge / Polynomial / Random Forest.
-- `cross_val_score` for more robust metrics.
-- Export with `joblib` and serve predictions behind a tiny API or Streamlit app.
+- **Why cross-validation instead of one split?** It averages performance over 5
+  partitions, so the ranking is not a lucky sample.
+- **Why compare multiple families?** Simplicity revealed: linear beat Random
+  Forest on this small, mostly-linear dataset.
+- Interpretability is a business asset: coefficients become a budget-allocation
+  recommendation.
