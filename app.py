@@ -54,9 +54,9 @@ st.caption(
 
 with st.sidebar:
     st.header("Marketing budget")
-    instagram = st.slider("Instagram ad spend ($)", 0, 10000, 2500, 100)
-    tv = st.slider("TV ad spend ($)", 0, 50000, 12000, 500)
-    email = st.slider("Email spend ($)", 0, 10000, 2000, 100)
+    instagram = st.slider("Instagram ad spend ($)", 0, 10000, 2500, 100, key="ig")
+    tv = st.slider("TV ad spend ($)", 0, 50000, 12000, 500, key="tv")
+    email = st.slider("Email spend ($)", 0, 10000, 2000, 100, key="em")
     season = st.selectbox("Season", SEASONS)
 
 row = build_row(instagram, tv, email, season, features)
@@ -140,6 +140,14 @@ with tab_whatif:
     col1.metric("Current prediction", f"${current_pred:,.0f}")
     col2.metric("New prediction", f"${new_pred:,.0f}")
     col3.metric("Change in sales", f"${new_pred - current_pred:+,.0f}")
+
+    key_map = {v: k for k, v in CHANNELS.items()}
+    if st.button(f"Apply this new budget to the whole dashboard", type="primary"):
+        st.session_state["ig"] = instagram
+        st.session_state["tv"] = tv
+        st.session_state["em"] = email
+        st.session_state[key_map[column]] = scale
+        st.rerun()
 
     st.markdown("**Incremental sales at selected budgets:**")
     levels = np.linspace(0, scale, 6, dtype=int)
