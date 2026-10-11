@@ -68,6 +68,18 @@ c1.metric("Predicted monthly sales", f"${prediction:,.0f}")
 c2.metric("Total budget", f"${total_budget:,.0f}")
 c3.metric("Return per $1 of budget", f"${prediction / total_budget:,.2f}" if total_budget > 0 else "—")
 
+st.subheader("🌦️ Season effect at this budget")
+season_rows = []
+base_season_pred = None
+for s in SEASONS:
+    p = float(model.predict(build_row(instagram, tv, email, s, features))[0])
+    season_rows.append({"Season": s, "Predicted sales ($)": int(round(p))})
+base_season_pred = season_rows[0]["Predicted sales ($)"]
+season_effect = pd.DataFrame(season_rows)
+season_effect["Δ vs Q1 ($)"] = season_effect["Predicted sales ($)"] - base_season_pred
+st.dataframe(season_effect, use_container_width=True, hide_index=True)
+st.caption("Same budget, only the season changes. Q1 is the reference (baseline).")
+
 tab_contrib, tab_whatif, tab_history, tab_planner = st.tabs(
     ["🔍 Contribution", "🎯 What-if analysis", "📅 Historical view", "🗓️ Budget planner"]
 )
